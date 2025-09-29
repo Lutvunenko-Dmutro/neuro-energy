@@ -30,14 +30,20 @@ def format_result(mode, result):
 
     return str(result)
 
-def run_algorithm(root, output, dataset_var, mode_var, gen_var):
-    """Запуск одного етапу аналізу."""
+def run_algorithm(root, output, dataset_var, mode_var, gen_var, on_finish=None):
+    """
+    Запуск одного етапу аналізу.
+    Режими беруться з MODE_CONFIG (features, params, structure, opt).
+    Після завершення викликає on_finish (для послідовного запуску).
+    """
     dataset = dataset_var.get()
     mode = mode_var.get()
     gens = int(gen_var.get())
 
     if mode not in MODE_CONFIG:
         log(root, output, f"⚠️ Невідомий режим '{mode}'", "warn")
+        if on_finish:
+            root.after(0, on_finish)
         return
 
     desc = MODE_CONFIG[mode]["desc"]
@@ -50,8 +56,11 @@ def run_algorithm(root, output, dataset_var, mode_var, gen_var):
             X, y, cols = load_dataset(dataset)
         except Exception as e:
             log(root, output, f"❌ Помилка завантаження даних: {e}", "error")
+            if on_finish:
+                root.after(0, on_finish)
             return
 
+        # Виклик функції GA залежно від режиму
         if mode == "features":
             result = func(
                 X, y, cols,
@@ -82,6 +91,7 @@ def run_algorithm(root, output, dataset_var, mode_var, gen_var):
         pretty = format_result(mode, result)
         log(root, output, f"✅ Завершено ({desc}): {pretty}", "ok")
 
+        # Додаємо результат у таблицю
         if hasattr(root, "results_table"):
             if isinstance(result, dict):
                 root.after(0, lambda: root.results_table.insert(
@@ -103,10 +113,14 @@ def run_algorithm(root, output, dataset_var, mode_var, gen_var):
                                 f"{p['layers']}×{p['neurons']}")
                     ))
 
+        # Викликаємо callback для переходу до наступного етапу
+        if on_finish:
+            root.after(0, on_finish)
+
     threading.Thread(target=task, daemon=True).start()
 
 def run_all_modes(root, output, dataset_var, gen_var):
-    """Запуск усіх етапів аналізу послідовно."""
+    """Запуск усіх етапів аналізу послідовно (features → params → structure → opt)."""
     modes = list(MODE_CONFIG.keys())
 
     def run_next(i=0):
@@ -117,10 +131,10 @@ def run_all_modes(root, output, dataset_var, gen_var):
         mode = modes[i]
         log(root, output, f"▶ Запуск етапу {mode}…", "info")
 
-        def task():
-            run_algorithm(root, output, dataset_var, tk.StringVar(value=mode), gen_var)
-            root.after(200, lambda: run_next(i+1))
-
-        threading.Thread(target=task, daemon=True).start()
+        run_algorithm(
+            root, output, dataset_var,
+            tk.StringVar(value=mode), gen_var,
+            on_finish=lambda: run_next(i+1)
+        )
 
     run_next()
