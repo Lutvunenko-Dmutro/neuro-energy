@@ -26,18 +26,12 @@ def format_result(mode, result):
                 f"шарів={result['layers']}, нейронів={result['neurons']}")
 
     elif mode == "opt":
-        return "Парето‑фронт:\n" + "\n".join(
-            [f"MAE={p['mae']:.3f}, RMSE={p['rmse']:.3f}, {p['layers']}×{p['neurons']}"
-             for p in result]
-        )
+        return f"Парето‑рішень={len(result)}"
 
     return str(result)
 
 def run_algorithm(root, output, dataset_var, mode_var, gen_var):
-    """
-    Запуск одного етапу аналізу.
-    Режими беруться з MODE_CONFIG (features, params, structure, opt).
-    """
+    """Запуск одного етапу аналізу."""
     dataset = dataset_var.get()
     mode = mode_var.get()
     gens = int(gen_var.get())
@@ -58,7 +52,6 @@ def run_algorithm(root, output, dataset_var, mode_var, gen_var):
             log(root, output, f"❌ Помилка завантаження даних: {e}", "error")
             return
 
-        # Виклик функції GA залежно від режиму
         if mode == "features":
             result = func(
                 X, y, cols,
@@ -89,10 +82,8 @@ def run_algorithm(root, output, dataset_var, mode_var, gen_var):
         pretty = format_result(mode, result)
         log(root, output, f"✅ Завершено ({desc}): {pretty}", "ok")
 
-        # Додаємо результат у таблицю
         if hasattr(root, "results_table"):
             if isinstance(result, dict):
-                # features / params / structure
                 root.after(0, lambda: root.results_table.insert(
                     "", "end",
                     values=(dataset,
@@ -102,7 +93,6 @@ def run_algorithm(root, output, dataset_var, mode_var, gen_var):
                             pretty)
                 ))
             elif isinstance(result, list):
-                # opt → кілька рішень
                 for p in result:
                     root.after(0, lambda p=p: root.results_table.insert(
                         "", "end",
