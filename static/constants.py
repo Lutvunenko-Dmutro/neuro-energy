@@ -1,0 +1,6 @@
+APP_NAME = "SmartCampus Evolutionary Search"
+VERSION = "1.0"
+
+DEFAULT_POP_SIZE = 10
+DEFAULT_GENERATIONS = 5
+DEFAULT_MAX_ITER = 100
