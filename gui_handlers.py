@@ -3,6 +3,14 @@ import threading
 from datasets import load_dataset
 from static.mode_config import MODE_CONFIG
 
+# Людяні назви режимів
+MODE_NAMES = {
+    "features": "Відбір ознак",
+    "params": "Параметричний синтез",
+    "structure": "Структурний синтез",
+    "opt": "Оптимізація структури"
+}
+
 def log(root, output, msg, tag=None):
     """Додає повідомлення у логове вікно GUI."""
     root.after(0, lambda: (output.insert(tk.END, msg + "\n", tag), output.see(tk.END)))
@@ -13,17 +21,13 @@ def format_result(mode, result):
         return str(result)
 
     if mode == "features":
-        return (f"MAE={result['mae']:.3f}, RMSE={result['rmse']:.3f}, "
-                f"Відібрано ознак={result['n_features']}, "
-                f"Ознаки={', '.join(result['features'])}")
+        return f"Ознаки: {', '.join(result['features'])}"
 
     elif mode == "params":
-        return (f"MAE={result['mae']:.3f}, RMSE={result['rmse']:.3f}, "
-                f"hidden={result['hidden']}, lr={result['lr']}, alpha={result['alpha']}")
+        return f"h={result['hidden']}, lr={result['lr']}, α={result['alpha']}"
 
     elif mode == "structure":
-        return (f"MAE={result['mae']:.3f}, RMSE={result['rmse']:.3f}, "
-                f"шарів={result['layers']}, нейронів={result['neurons']}")
+        return f"{result['layers']}×{result['neurons']}"
 
     elif mode == "opt":
         return f"Парето‑рішень={len(result)}"
@@ -33,7 +37,6 @@ def format_result(mode, result):
 def run_algorithm(root, output, dataset_var, mode_var, gen_var, on_finish=None):
     """
     Запуск одного етапу аналізу.
-    Режими беруться з MODE_CONFIG (features, params, structure, opt).
     Після завершення викликає on_finish (для послідовного запуску).
     """
     dataset = dataset_var.get()
@@ -46,10 +49,10 @@ def run_algorithm(root, output, dataset_var, mode_var, gen_var, on_finish=None):
             root.after(0, on_finish)
         return
 
-    desc = MODE_CONFIG[mode]["desc"]
+    desc = MODE_NAMES.get(mode, mode)
     func = MODE_CONFIG[mode]["func"]
 
-    log(root, output, f"▶ Запуск аналізу ({mode}) – {desc} для енергосистеми {dataset}…", "info")
+    log(root, output, f"⚡ Запуск етапу «{desc}» для енергосистеми {dataset}…", "info")
 
     def task():
         try:
@@ -71,7 +74,8 @@ def run_algorithm(root, output, dataset_var, mode_var, gen_var, on_finish=None):
                 cv_splits=3,
                 progress_cb=lambda g, mae, rmse, extra: log(
                     root, output,
-                    f"[Gen {g+1}/{gens}] MAE={mae:.3f}, RMSE={rmse:.3f}, {extra}", "info"
+                    f"Покоління {g+1} з {gens}: середня похибка = {mae:.3f}, квадратична похибка = {rmse:.3f}. {extra}",
+                    "info"
                 )
             )
         else:
@@ -84,12 +88,13 @@ def run_algorithm(root, output, dataset_var, mode_var, gen_var, on_finish=None):
                 cv_splits=3,
                 progress_cb=lambda g, mae, rmse, extra: log(
                     root, output,
-                    f"[Gen {g+1}/{gens}] MAE={mae:.3f}, RMSE={rmse:.3f}, {extra}", "info"
+                    f"Покоління {g+1} з {gens}: середня похибка = {mae:.3f}, квадратична похибка = {rmse:.3f}. {extra}",
+                    "info"
                 )
             )
 
-        pretty = format_result(mode, result)
-        log(root, output, f"✅ Завершено ({desc}): {pretty}", "ok")
+        # Підсумок
+        log(root, output, f"✅ Етап «{desc}» завершено.", "ok")
 
         # Додаємо результат у таблицю
         if hasattr(root, "results_table"):
@@ -97,17 +102,17 @@ def run_algorithm(root, output, dataset_var, mode_var, gen_var, on_finish=None):
                 root.after(0, lambda: root.results_table.insert(
                     "", "end",
                     values=(dataset,
-                            mode,
+                            desc,
                             f"{result.get('mae', 0):.3f}",
                             f"{result.get('rmse', 0):.3f}",
-                            pretty)
+                            format_result(mode, result))
                 ))
             elif isinstance(result, list):
                 for p in result:
                     root.after(0, lambda p=p: root.results_table.insert(
                         "", "end",
                         values=(dataset,
-                                mode,
+                                desc,
                                 f"{p.get('mae', 0):.3f}",
                                 f"{p.get('rmse', 0):.3f}",
                                 f"{p['layers']}×{p['neurons']}")
@@ -120,7 +125,7 @@ def run_algorithm(root, output, dataset_var, mode_var, gen_var, on_finish=None):
     threading.Thread(target=task, daemon=True).start()
 
 def run_all_modes(root, output, dataset_var, gen_var):
-    """Запуск усіх етапів аналізу послідовно (features → params → structure → opt)."""
+    """Запуск усіх етапів аналізу послідовно."""
     modes = list(MODE_CONFIG.keys())
 
     def run_next(i=0):
@@ -129,7 +134,8 @@ def run_all_modes(root, output, dataset_var, gen_var):
             return
 
         mode = modes[i]
-        log(root, output, f"▶ Запуск етапу {mode}…", "info")
+        desc = MODE_NAMES.get(mode, mode)
+        log(root, output, f"▶ Запуск етапу «{desc}»…", "info")
 
         run_algorithm(
             root, output, dataset_var,
